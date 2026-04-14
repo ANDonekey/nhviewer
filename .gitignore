@@ -77,8 +77,12 @@ vcs.xml
 .DS_Store
 Thumbs.db
 
-# codex tmp
+# codex tmp / local assistant config
 .codex_tmp/
 .claude/
 AGENTS.md
-docs
+
+# project local/auxiliary folders (exclude fully)
+.idea/
+docs/
+scripts/
