@@ -1,6 +1,7 @@
 package com.nhviewer.download
 
 import android.content.Context
+import android.content.Intent
 import com.nhviewer.domain.model.PageImage
 import java.io.File
 import java.io.IOException
@@ -34,13 +35,23 @@ object DownloadCenter {
         initialized = true
     }
 
-    fun enqueueGallery(
-        galleryId: Long,
-        title: String,
-        images: List<PageImage>
-    ): String {
+    /**
+     * Enqueue a gallery for download. Returns the existing taskId if the gallery is already
+     * QUEUED, RUNNING, or PAUSED (de-dup guard). Otherwise creates a new task and starts it.
+     */
+    fun enqueueGallery(galleryId: Long, title: String, images: List<PageImage>): String {
         check(initialized) { "DownloadCenter not initialized" }
-        val safeTitle = title.ifBlank { "gallery_$galleryId" }.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+
+        // De-dup: don't re-enqueue if already active
+        val existing = _tasks.value.firstOrNull {
+            it.galleryId == galleryId && it.status in setOf(
+                DownloadStatus.QUEUED, DownloadStatus.RUNNING, DownloadStatus.PAUSED
+            )
+        }
+        if (existing != null) return existing.taskId
+
+        val safeTitle = title.ifBlank { "gallery_$galleryId" }
+            .replace(Regex("[\\\\/:*?\"<>|]"), "_")
         val outputDir = File(appContext.getExternalFilesDir(null), "nhviewer/$galleryId-$safeTitle")
         outputDir.mkdirs()
 
@@ -56,24 +67,38 @@ object DownloadCenter {
             imageUrls = images.map { it.url }
         )
         _tasks.update { listOf(task) + it }
-        startTask(taskId, galleryId, title, images, outputDir)
+        startService()
+        startTask(taskId, images, outputDir)
         return taskId
     }
 
-    fun retry(taskId: String, images: List<PageImage>) {
+    fun pause(taskId: String) {
+        runningJobs.remove(taskId)?.cancel()
+        updateTask(taskId) { it.copy(status = DownloadStatus.PAUSED, errorMessage = null) }
+    }
+
+    fun resume(taskId: String) {
         val task = _tasks.value.firstOrNull { it.taskId == taskId } ?: return
-        if (task.status == DownloadStatus.RUNNING) return
+        if (task.status != DownloadStatus.PAUSED) return
+        val images = task.imageUrls.mapIndexed { index, url ->
+            PageImage(index = index + 1, url = url, thumbnailUrl = null)
+        }
         val outputDir = File(task.outputDir)
         outputDir.mkdirs()
-        startTask(taskId, task.galleryId, task.title, images, outputDir)
+        startService()
+        startTask(taskId, images, outputDir)
     }
 
     fun retry(taskId: String) {
         val task = _tasks.value.firstOrNull { it.taskId == taskId } ?: return
+        if (task.status == DownloadStatus.RUNNING) return
         val images = task.imageUrls.mapIndexed { index, url ->
             PageImage(index = index + 1, url = url, thumbnailUrl = null)
         }
-        retry(taskId, images)
+        val outputDir = File(task.outputDir)
+        outputDir.mkdirs()
+        startService()
+        startTask(taskId, images, outputDir)
     }
 
     fun cancel(taskId: String) {
@@ -81,17 +106,16 @@ object DownloadCenter {
         updateTask(taskId) { it.copy(status = DownloadStatus.CANCELED, errorMessage = null) }
     }
 
-    private fun startTask(
-        taskId: String,
-        galleryId: Long,
-        title: String,
-        images: List<PageImage>,
-        outputDir: File
-    ) {
+    private fun startTask(taskId: String, images: List<PageImage>, outputDir: File) {
+        // Count files already downloaded so we show accurate initial progress
+        val alreadyDone = images.count { pageImage ->
+            val ext = guessExtension(pageImage.url)
+            File(outputDir, "p${pageImage.index}.$ext").exists()
+        }
         updateTask(taskId) {
             it.copy(
                 status = DownloadStatus.RUNNING,
-                completed = 0,
+                completed = alreadyDone,
                 total = images.size,
                 errorMessage = null
             )
@@ -99,18 +123,14 @@ object DownloadCenter {
 
         val job = scope.launch {
             try {
-                var completed = 0
                 images.forEachIndexed { index, pageImage ->
                     val ext = guessExtension(pageImage.url)
-                    val outFile = File(outputDir, "p${index + 1}.$ext")
-                    downloadFile(pageImage.url, outFile)
-                    completed += 1
+                    val outFile = File(outputDir, "p${pageImage.index}.$ext")
+                    if (!outFile.exists()) {
+                        downloadFile(pageImage.url, outFile)
+                    }
                     updateTask(taskId) { current ->
-                        current.copy(
-                            status = DownloadStatus.RUNNING,
-                            completed = completed,
-                            total = images.size
-                        )
+                        current.copy(status = DownloadStatus.RUNNING, completed = index + 1, total = images.size)
                     }
                 }
                 updateTask(taskId) { current ->
@@ -124,38 +144,31 @@ object DownloadCenter {
             } catch (throwable: Throwable) {
                 if (throwable is kotlinx.coroutines.CancellationException) return@launch
                 updateTask(taskId) { current ->
-                    current.copy(
-                        status = DownloadStatus.FAILED,
-                        errorMessage = throwable.message ?: "Download failed"
-                    )
+                    current.copy(status = DownloadStatus.FAILED, errorMessage = throwable.message ?: "Download failed")
                 }
             } finally {
                 runningJobs.remove(taskId)
             }
         }
-
         runningJobs[taskId] = job
     }
 
+    private fun startService() {
+        val intent = Intent(appContext, DownloadService::class.java)
+        appContext.startService(intent)
+    }
+
     private fun updateTask(taskId: String, transform: (DownloadTask) -> DownloadTask) {
-        _tasks.update { list ->
-            list.map { task ->
-                if (task.taskId == taskId) transform(task) else task
-            }
-        }
+        _tasks.update { list -> list.map { if (it.taskId == taskId) transform(it) else it } }
     }
 
     @Throws(IOException::class)
     private fun downloadFile(url: String, output: File) {
         val request = Request.Builder().url(url).build()
         okHttpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("HTTP ${response.code} for $url")
-            }
+            if (!response.isSuccessful) throw IOException("HTTP ${response.code} for $url")
             val body = response.body ?: throw IOException("Empty response body")
-            output.outputStream().use { stream ->
-                body.byteStream().copyTo(stream)
-            }
+            output.outputStream().use { body.byteStream().copyTo(it) }
         }
     }
 

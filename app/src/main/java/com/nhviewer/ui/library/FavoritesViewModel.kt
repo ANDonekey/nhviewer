@@ -6,6 +6,7 @@ import com.nhviewer.domain.model.GallerySummary
 import com.nhviewer.domain.repository.GalleryRepository
 import com.nhviewer.domain.repository.LibraryRepository
 import com.nhviewer.domain.repository.SettingsRepository
+import com.nhviewer.ui.common.ErrorText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,6 +61,18 @@ class FavoritesViewModel(
         }
     }
 
+    fun removeByIds(ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            if (_uiState.value.source == "online") {
+                ids.forEach { galleryRepository.removeFavoriteOnline(it) }
+                loadOnlineFavorites()
+            } else {
+                ids.forEach { libraryRepository.removeFavorite(it) }
+            }
+        }
+    }
+
     private fun collectLocalFavorites() {
         localCollectJob?.cancel()
         localCollectJob = viewModelScope.launch {
@@ -101,7 +114,7 @@ class FavoritesViewModel(
                         it.copy(
                             isLoading = false,
                             list = emptyList(),
-                            error = error.message ?: "Load favorites failed"
+                            error = ErrorText.fromMessage(error.message, "Load favorites failed")
                         )
                     }
                 }

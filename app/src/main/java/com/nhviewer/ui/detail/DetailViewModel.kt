@@ -12,9 +12,11 @@ import com.nhviewer.domain.usecase.GetGalleryDetailUseCase
 import com.nhviewer.ui.common.LoadState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -29,6 +31,8 @@ class DetailViewModel(
 
     private val _uiState = MutableStateFlow(DetailUiState())
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
+    val settings = settingsRepository.observeSettings()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.nhviewer.domain.model.AppSettings())
     private var favoriteObserveJob: Job? = null
     private var settingsObserveJob: Job? = null
     private var useOnlineFavorites: Boolean = false

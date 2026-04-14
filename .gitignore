@@ -79,3 +79,6 @@ Thumbs.db
 
 # codex tmp
 .codex_tmp/
+.claude/
+AGENTS.md
+docs

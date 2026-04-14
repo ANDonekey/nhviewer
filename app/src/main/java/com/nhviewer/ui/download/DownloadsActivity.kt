@@ -26,12 +26,10 @@ class DownloadsActivity : AppCompatActivity() {
         emptyView = findViewById(R.id.emptyView)
 
         adapter = DownloadTaskAdapter(
-            onRetry = { task ->
-                DownloadCenter.retry(task.taskId)
-            },
-            onCancel = { task ->
-                DownloadCenter.cancel(task.taskId)
-            }
+            onPause = { task -> DownloadCenter.pause(task.taskId) },
+            onResume = { task -> DownloadCenter.resume(task.taskId) },
+            onRetry = { task -> DownloadCenter.retry(task.taskId) },
+            onCancel = { task -> DownloadCenter.cancel(task.taskId) }
         )
         recyclerView.layoutManager = LinearLayoutManager(this)
         recyclerView.adapter = adapter

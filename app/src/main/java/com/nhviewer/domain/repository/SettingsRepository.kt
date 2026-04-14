@@ -10,9 +10,18 @@ interface SettingsRepository {
     suspend fun setThemeMode(value: String)
     suspend fun setLanguage(value: String)
     suspend fun setPreferJapaneseTitle(value: Boolean)
+    suspend fun setShowChineseTags(value: Boolean)
     suspend fun setHomeLanguageFilter(value: String)
     suspend fun setHomeSortOption(value: String)
     suspend fun setApiKey(value: String)
+    suspend fun setSplashAnimationEnabled(value: Boolean) {}
     suspend fun setHideBlacklisted(value: Boolean)
     suspend fun setFavoritesSource(value: String)
+    suspend fun setReaderTapPagingEnabled(value: Boolean)
+    suspend fun setReaderSwipePagingEnabled(value: Boolean)
+    suspend fun setReaderTapToToggleChromeEnabled(value: Boolean)
+    suspend fun setReaderReverseTapZones(value: Boolean)
+    suspend fun setReaderGestureEnabled(value: Boolean)
+    suspend fun setReaderLeftHandedMode(value: Boolean)
+    suspend fun setReaderPagingMode(value: String)
 }

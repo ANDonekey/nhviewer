@@ -2,6 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
     android:orientation="vertical"
     android:padding="10dp">
 
@@ -18,6 +19,42 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
         android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/batchBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/batchCountView"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/batch_selected_count"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/batchSelectAllButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/batch_select_all" />
+
+        <Button
+            android:id="@+id/batchDeleteButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/batch_delete" />
+
+        <Button
+            android:id="@+id/batchCancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/batch_cancel" />
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recyclerView"

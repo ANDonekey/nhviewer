@@ -24,10 +24,15 @@ private const val THUMB_BASE_URL = "https://t1.nhentai.net/"
 private const val IMAGE_BASE_URL = "https://i1.nhentai.net/"
 
 fun GalleryListDto.toSummaryPage(): Page<GallerySummary> {
+    val effectiveTotalPages = when {
+        numPages != null -> numPages          // API returned an authoritative value
+        result.isEmpty() -> page              // empty result → this is the last page
+        else -> page + 1                      // has results but no total → assume next exists
+    }
     return Page(
         items = result.map { it.toDomainSummary() },
         page = page,
-        totalPages = numPages ?: page
+        totalPages = effectiveTotalPages
     )
 }
 
@@ -48,6 +53,7 @@ fun GalleryDto.toDomainSummary(): GallerySummary {
         },
         pageCount = numPages,
         tags = emptyList(),
+        tagIds = tagIds,
         blacklisted = blacklisted
     )
 }
@@ -89,7 +95,9 @@ fun GalleryCommentDto.toDomain(): GalleryComment = GalleryComment(
     galleryId = galleryId,
     username = poster.username.ifBlank { "unknown" },
     body = body,
-    postDateSeconds = postDate
+    postDateSeconds = postDate,
+    userId = poster.id,
+    userSlug = poster.slug
 )
 
 fun ImageDto.toDomain(): PageImage = PageImage(

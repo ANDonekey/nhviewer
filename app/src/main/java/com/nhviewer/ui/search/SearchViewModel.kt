@@ -33,6 +33,12 @@ class SearchViewModel(
         }
     }
 
+    fun updateLanguageFilter(filter: SearchLanguageFilter) {
+        _uiState.update { state ->
+            state.copy(queryState = state.queryState.copy(languageFilter = filter))
+        }
+    }
+
     fun updateTags(tags: List<Tag>) {
         _uiState.update { state ->
             state.copy(queryState = state.queryState.copy(selectedTags = tags))
@@ -74,12 +80,51 @@ class SearchViewModel(
         }
     }
 
+    fun removeTag(tagId: Long) {
+        _uiState.update { state ->
+            state.copy(
+                queryState = state.queryState.copy(
+                    selectedTags = state.queryState.selectedTags.filterNot { it.id == tagId }
+                )
+            )
+        }
+    }
+
+    fun applyLanguageFilterAndSearch(filter: SearchLanguageFilter) {
+        viewModelScope.launch {
+            val current = _uiState.value.queryState.selectedTags
+            val withoutLanguage = current.filterNot { it.type.equals("language", ignoreCase = true) }
+            val nextTags = when (filter) {
+                SearchLanguageFilter.ALL -> withoutLanguage
+                SearchLanguageFilter.JAPANESE -> {
+                    val tag = resolveLanguageTag("japanese")
+                    if (tag != null) withoutLanguage + tag else withoutLanguage
+                }
+                SearchLanguageFilter.CHINESE -> {
+                    val tag = resolveLanguageTag("chinese")
+                    if (tag != null) withoutLanguage + tag else withoutLanguage
+                }
+            }
+            _uiState.update { state ->
+                state.copy(
+                    queryState = state.queryState.copy(
+                        languageFilter = filter,
+                        selectedTags = nextTags.distinctBy { it.id },
+                        page = 1
+                    )
+                )
+            }
+            search(1)
+        }
+    }
+
     fun search(page: Int = 1) {
         val query = uiState.value.queryState
         _uiState.update {
             it.copy(
                 queryState = query.copy(page = page),
-                resultState = LoadState.Loading
+                resultState = LoadState.Loading,
+                tagMessage = null  // clear stale tag feedback on new search
             )
         }
 
@@ -117,5 +162,13 @@ class SearchViewModel(
                 }
             )
         }
+    }
+
+    private suspend fun resolveLanguageTag(keyword: String): Tag? {
+        val result = searchTagsUseCase(keyword).getOrDefault(emptyList())
+        return result.firstOrNull {
+            it.type.equals("language", ignoreCase = true) &&
+                it.name.equals(keyword, ignoreCase = true)
+        } ?: result.firstOrNull { it.type.equals("language", ignoreCase = true) }
     }
 }

@@ -8,5 +8,6 @@ data class GallerySummary(
     val coverUrl: String?,
     val pageCount: Int,
     val tags: List<Tag>,
+    val tagIds: List<Long> = emptyList(),
     val blacklisted: Boolean = false
 )

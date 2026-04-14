@@ -15,6 +15,9 @@ interface HistoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: HistoryEntity)
 
+    @Query("DELETE FROM history WHERE galleryId = :galleryId")
+    suspend fun deleteByGalleryId(galleryId: Long)
+
     @Query("DELETE FROM history")
     suspend fun clearAll()
 }

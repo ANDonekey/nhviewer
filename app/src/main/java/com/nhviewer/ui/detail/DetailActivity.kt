@@ -2,14 +2,20 @@ package com.nhviewer.ui.detail
 
 import android.content.Intent
 import android.graphics.drawable.ColorDrawable
+import android.net.Uri
 import android.os.Bundle
+import android.text.SpannableString
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.activity.viewModels
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -19,14 +25,12 @@ import androidx.recyclerview.widget.RecyclerView
 import coil.load
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
-import com.nhviewer.app.AppGraph
 import com.nhviewer.R
 import com.nhviewer.download.DownloadCenter
 import com.nhviewer.domain.model.GalleryComment
 import com.nhviewer.domain.model.GalleryDetail
 import com.nhviewer.domain.model.Tag
 import com.nhviewer.ui.common.LoadState
-import com.nhviewer.ui.common.NhViewModelFactory
 import com.nhviewer.ui.reader.ReaderActivity
 import com.nhviewer.ui.search.SearchActivity
 import java.time.Instant
@@ -34,16 +38,13 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.launch
+import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class DetailActivity : AppCompatActivity() {
-    private val detailViewModel: DetailViewModel by viewModels { NhViewModelFactory() }
+    private val detailViewModel: DetailViewModel by viewModel()
 
     private lateinit var titleView: TextView
     private lateinit var categoryView: TextView
-    private lateinit var languageView: TextView
-    private lateinit var pagesView: TextView
-    private lateinit var favoriteCountView: TextView
-    private lateinit var uploadTimeView: TextView
     private lateinit var commentsView: TextView
     private lateinit var commentsToggleView: TextView
     private lateinit var tagSectionContainer: LinearLayout
@@ -58,6 +59,7 @@ class DetailActivity : AppCompatActivity() {
     private lateinit var previewAdapter: PreviewImageAdapter
 
     private var preferJapaneseTitle: Boolean = false
+    private var showChineseTags: Boolean = true
     private var lastDetail: GalleryDetail? = null
     private var currentComments: List<GalleryComment> = emptyList()
     private var areCommentsExpanded: Boolean = false
@@ -72,12 +74,9 @@ class DetailActivity : AppCompatActivity() {
 
         titleView = findViewById(R.id.titleView)
         categoryView = findViewById(R.id.categoryView)
-        languageView = findViewById(R.id.languageView)
-        pagesView = findViewById(R.id.pagesView)
-        favoriteCountView = findViewById(R.id.favoriteCountView)
-        uploadTimeView = findViewById(R.id.uploadTimeView)
         commentsView = findViewById(R.id.commentsView)
         commentsToggleView = findViewById(R.id.commentsToggleView)
+
         tagSectionContainer = findViewById(R.id.tagSectionContainer)
         coverView = findViewById(R.id.coverView)
         previewRecyclerView = findViewById(R.id.previewRecyclerView)
@@ -201,10 +200,6 @@ class DetailActivity : AppCompatActivity() {
     private fun bindDetail(detail: GalleryDetail) {
         titleView.text = selectTitle(detail).ifBlank { getString(R.string.gallery_untitled, detail.id) }
         categoryView.text = inferCategory(detail.tags)
-        languageView.text = getString(R.string.detail_language_template, inferLanguage(detail.tags))
-        pagesView.text = getString(R.string.detail_pages_template, detail.pageCount)
-        favoriteCountView.text = getString(R.string.detail_favorites_template, detail.tags.size)
-        uploadTimeView.text = getString(R.string.detail_upload_unknown)
 
         bindTagSections(detail.tags)
         coverView.load(detail.coverUrl) {
@@ -243,30 +238,73 @@ class DetailActivity : AppCompatActivity() {
 
     private fun renderCommentList(allComments: List<GalleryComment>) {
         val target = if (areCommentsExpanded) allComments else allComments.take(2)
-        commentsView.text = target.joinToString("\n\n") { comment ->
+        val builder = SpannableStringBuilder()
+        target.forEachIndexed { index, comment ->
             val timeText = timeFormatter.format(Instant.ofEpochSecond(comment.postDateSeconds))
-            "${comment.username}   $timeText\n${comment.body}"
+            val header = "${comment.username}   $timeText"
+            val headerSpan = SpannableString(header)
+            headerSpan.setSpan(
+                object : ClickableSpan() {
+                    override fun onClick(widget: View) {
+                        openCommentUserHome(comment)
+                    }
+                },
+                0,
+                comment.username.length.coerceAtLeast(0),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            builder.append(headerSpan)
+            builder.append('\n')
+            builder.append(comment.body)
+            if (index != target.lastIndex) {
+                builder.append("\n\n")
+            }
         }
+        commentsView.text = builder
+        commentsView.movementMethod = LinkMovementMethod.getInstance()
+
         val hasMore = allComments.size > 2
         commentsToggleView.visibility = if (hasMore) View.VISIBLE else View.GONE
         if (hasMore) {
             commentsToggleView.text = if (areCommentsExpanded) {
                 getString(R.string.detail_comments_collapse)
             } else {
-                getString(R.string.detail_comments_expand, allComments.size - 2)
+                getString(R.string.detail_comments_expand, allComments.size)
             }
+        }
+    }
+
+    private fun openCommentUserHome(comment: GalleryComment) {
+        val slug = comment.userSlug?.trim().orEmpty()
+        if (slug.isBlank()) {
+            Toast.makeText(this, R.string.detail_comment_user_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val url = "https://nhentai.net/users/$slug/"
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: Throwable) {
+            Toast.makeText(this, R.string.detail_comment_user_open_failed, Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun collectSettings() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                AppGraph.settingsRepository.observeSettings().collect { settings ->
-                    val changed = preferJapaneseTitle != settings.preferJapaneseTitle
+                detailViewModel.settings.collect { settings ->
+                    val titleChanged = preferJapaneseTitle != settings.preferJapaneseTitle
+                    val tagDisplayChanged = showChineseTags != settings.showChineseTags
                     preferJapaneseTitle = settings.preferJapaneseTitle
-                    if (changed) {
+                    showChineseTags = settings.showChineseTags
+                    if (titleChanged) {
                         lastDetail?.let { detail ->
                             titleView.text = selectTitle(detail).ifBlank { getString(R.string.gallery_untitled, detail.id) }
+                        }
+                    }
+                    if (tagDisplayChanged) {
+                        lastDetail?.let { detail ->
+                            categoryView.text = inferCategory(detail.tags)
+                            bindTagSections(detail.tags)
                         }
                     }
                 }
@@ -322,7 +360,7 @@ class DetailActivity : AppCompatActivity() {
 
             items.forEach { tag ->
                 val chip = Chip(this).apply {
-                    text = tag.name
+                    text = displayTagName(tag)
                     isCheckable = false
                     isClickable = true
                     setEnsureMinTouchTargetSize(false)
@@ -344,19 +382,18 @@ class DetailActivity : AppCompatActivity() {
     }
 
     private fun inferCategory(tags: List<Tag>): String {
-        val candidate = tags.firstOrNull { it.type.equals("category", ignoreCase = true) }?.name
+        val candidate = tags.firstOrNull { it.type.equals("category", ignoreCase = true) }
+            ?.let { displayTagName(it) }
         if (!candidate.isNullOrBlank()) return candidate.uppercase(Locale.getDefault())
         return getString(R.string.detail_category_default)
     }
 
-    private fun inferLanguage(tags: List<Tag>): String {
-        val names = tags.map { it.name.lowercase(Locale.getDefault()) }
-        return when {
-            names.any { it.contains("chinese") } -> "Chinese"
-            names.any { it.contains("japanese") } -> "Japanese"
-            names.any { it.contains("english") } -> "English"
-            else -> "--"
+    private fun displayTagName(tag: Tag): String {
+        if (showChineseTags) {
+            val zh = tag.nameZh?.trim().orEmpty()
+            if (zh.isNotEmpty()) return zh
         }
+        return tag.name
     }
 
     private fun startReader(galleryId: Long, page: Int) {

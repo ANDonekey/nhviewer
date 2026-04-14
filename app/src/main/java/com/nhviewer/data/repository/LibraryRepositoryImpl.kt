@@ -55,6 +55,10 @@ class LibraryRepositoryImpl(
         )
     }
 
+    override suspend fun removeHistory(galleryId: Long) {
+        historyDao.deleteByGalleryId(galleryId)
+    }
+
     override suspend fun clearHistory() {
         historyDao.clearAll()
     }

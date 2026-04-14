@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nhviewer.domain.model.UserProfile
 import com.nhviewer.domain.repository.GalleryRepository
+import com.nhviewer.ui.common.ErrorText
 import com.nhviewer.ui.common.LoadState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,7 +36,11 @@ class UserProfileViewModel(
                 },
                 onFailure = { error ->
                     _uiState.update {
-                        it.copy(profileState = LoadState.Error(error.message ?: "Load profile failed"))
+                        it.copy(
+                            profileState = LoadState.Error(
+                                ErrorText.fromMessage(error.message, "Load profile failed")
+                            )
+                        )
                     }
                 }
             )

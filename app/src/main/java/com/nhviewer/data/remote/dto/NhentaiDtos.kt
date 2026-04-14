@@ -82,7 +82,19 @@ data class TagDto(
     @SerialName("name")
     val name: String = "",
     @SerialName("slug")
-    val slug: String = ""
+    val slug: String = "",
+    @SerialName("count")
+    val count: Int = 0
+)
+
+@Serializable
+data class TagPageDto(
+    @SerialName("result")
+    val result: List<TagDto> = emptyList(),
+    @SerialName("page")
+    val page: Int = 1,
+    @SerialName("num_pages")
+    val numPages: Int? = null
 )
 
 @Serializable

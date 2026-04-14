@@ -87,4 +87,9 @@ interface NhentaiService {
     suspend fun searchTags(
         @Body request: TagSearchRequestDto
     ): List<TagDto>
+
+    @GET("/api/v2/tags/ids")
+    suspend fun getTagsByIds(
+        @Query("ids") ids: String
+    ): List<TagDto>
 }

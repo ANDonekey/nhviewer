@@ -23,16 +23,16 @@ class NhentaiRemoteDataSource(
         GalleryListDto(
             result = service.getPopular(page),
             page = page,
-            numPages = page
+            numPages = null  // no total from API; toSummaryPage() will use page+1 fallback
         )
     }
 
     suspend fun search(query: String, sort: String?, page: Int): ApiResult<GalleryListDto> = safeApiCall {
-        service.searchGalleries(query = query, sort = sort, page = page)
+        service.searchGalleries(query = query, sort = sort, page = page).copy(page = page)
     }
 
     suspend fun getTagged(tagId: Long, sort: String?, page: Int, perPage: Int): ApiResult<GalleryListDto> = safeApiCall {
-        service.getTaggedGalleries(tagId = tagId, sort = sort, page = page, perPage = perPage)
+        service.getTaggedGalleries(tagId = tagId, sort = sort, page = page, perPage = perPage).copy(page = page)
     }
 
     suspend fun getDetail(galleryId: Long): ApiResult<GalleryDetailDto> = safeApiCall {
@@ -77,6 +77,14 @@ class NhentaiRemoteDataSource(
         )
     }
 
+    suspend fun getTagsByIds(tagIds: List<Long>): ApiResult<List<TagDto>> = safeApiCall {
+        if (tagIds.isEmpty()) {
+            emptyList()
+        } else {
+            service.getTagsByIds(ids = tagIds.joinToString(","))
+        }
+    }
+
     private suspend fun <T> safeApiCall(block: suspend () -> T): ApiResult<T> {
         return try {
             ApiResult.Success(block())
@@ -88,4 +96,5 @@ class NhentaiRemoteDataSource(
             ApiResult.UnknownError(throwable)
         }
     }
+
 }

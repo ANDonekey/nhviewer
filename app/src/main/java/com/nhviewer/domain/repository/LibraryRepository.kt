@@ -11,5 +11,6 @@ interface LibraryRepository {
 
     fun observeHistory(): Flow<List<GallerySummary>>
     suspend fun upsertHistory(item: GallerySummary, lastReadPage: Int)
+    suspend fun removeHistory(galleryId: Long)
     suspend fun clearHistory()
 }

@@ -15,6 +15,7 @@ data class DownloadTask(
 enum class DownloadStatus {
     QUEUED,
     RUNNING,
+    PAUSED,
     COMPLETED,
     FAILED,
     CANCELED

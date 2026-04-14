@@ -6,7 +6,6 @@ import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -17,13 +16,13 @@ import coil.load
 import com.nhviewer.R
 import com.nhviewer.domain.model.UserProfile
 import com.nhviewer.ui.common.LoadState
-import com.nhviewer.ui.common.NhViewModelFactory
 import com.nhviewer.ui.detail.DetailActivity
 import com.nhviewer.ui.home.HomeGalleryAdapter
 import kotlinx.coroutines.launch
+import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class UserProfileActivity : AppCompatActivity() {
-    private val viewModel: UserProfileViewModel by viewModels { NhViewModelFactory() }
+    private val viewModel: UserProfileViewModel by viewModel()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,11 +37,11 @@ class UserProfileActivity : AppCompatActivity() {
         val messageView: TextView = findViewById(R.id.messageView)
         val retryButton: Button = findViewById(R.id.retryButton)
 
-        val adapter = HomeGalleryAdapter { item ->
+        val adapter = HomeGalleryAdapter(onItemClick = { item ->
             startActivity(Intent(this, DetailActivity::class.java).apply {
                 putExtra(DetailActivity.EXTRA_GALLERY_ID, item.id)
             })
-        }
+        })
         recyclerView.layoutManager = LinearLayoutManager(this, RecyclerView.HORIZONTAL, false)
         recyclerView.adapter = adapter
 

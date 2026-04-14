@@ -20,4 +20,11 @@ class HistoryViewModel(
             libraryRepository.clearHistory()
         }
     }
+
+    fun removeByIds(ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            ids.forEach { libraryRepository.removeHistory(it) }
+        }
+    }
 }

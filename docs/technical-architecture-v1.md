@@ -1,88 +1,57 @@
-# 技术架构 v1
+# 技术架构 v1（当前实现基线）
 
 ## 1. 架构目标
-- 高内聚低耦合，页面与数据源解耦。
-- 可替换旧模块，支持渐进迁移。
-- 统一状态与错误模型，减少页面重复逻辑。
+- 保持 `data / domain / ui` 单向依赖。
+- 避免 Activity 直接访问数据层实现。
+- 所有页面状态统一为 `LoadState`（Loading/Content/Empty/Error）。
 
-## 2. 分层结构
+## 2. 分层说明
 
 ```text
 app/
-  ui/
-    feature-home/
-    feature-search/
-    feature-detail/
-    feature-reader/
-    feature-favorites/
-    feature-history/
-    feature-settings/
-  domain/
-    model/
-    repository/
-    usecase/
-  data/
-    remote/
-    local/
-    repository-impl/
-  core/
-    network/
-    database/
-    datastore/
-    common/
+  src/main/java/com/nhviewer/
+    ui/          # Activity, Adapter, ViewModel
+    domain/      # model, repository interface, usecase
+    data/        # remote/local/repository impl
+    core/        # network/common
+    app/         # AppGraph, Application, Theme
 ```
 
 ## 3. 依赖方向
 - `ui -> domain`
-- `domain` 不依赖 Android Framework 与具体库实现
-- `data -> domain`（实现 domain repository 接口）
-- `core` 被 `data/ui` 引用，不反向依赖业务层
+- `data -> domain`
+- `core` 被 `ui/data` 共用
+- `domain` 不依赖 Android Framework
 
 ## 4. 网络层
-- `Retrofit + OkHttp + Kotlinx Serialization`
-- 统一 `ApiResult<T>`：`Success` / `HttpError` / `NetworkError` / `UnknownError`
-- 统一拦截器：UA、日志、重试（指数退避，有限次数）
-- API 封装：`NhentaiService + NhentaiRemoteDataSource`
+- 技术栈：`Retrofit + OkHttp + Kotlinx Serialization`
+- 统一结果：`ApiResult.Success/HttpError/NetworkError/UnknownError`
+- 统一请求头：
+  - `User-Agent`
+  - `Authorization: Key <apiKey>`（由设置注入）
 
-## 5. API 优先约束（新增）
-- 线上功能数据统一来自 `nhentai API v2`，不走页面抓取。
-- OpenAPI 快照存放：`docs/external/nhentai-api-v2-openapi.json`
-- 文档页快照存放：`docs/external/nhentai-api-v2-docs.html`
-- 刷新脚本：`scripts/fetch-nhentai-api-docs.ps1`
+## 5. 数据层
+- Room：
+  - `favorites`
+  - `history`
+  - `reading_progress`
+- DataStore：
+  - 主题、语言、并发、首页筛选
+  - API Key
+  - blacklisted 隐藏开关
+  - 收藏源（local/online）
 
-## 6. 本地存储
-- `Room`
-- 表：`favorites`、`history`、`download_tasks`、`reading_progress`
-- `DataStore`
-- 键：`image_quality`、`cache_policy`、`max_concurrency`、`theme_mode`、`language`
+## 6. 状态管理
+- ViewModel 使用 `StateFlow` 暴露 UI 状态。
+- 页面只订阅 ViewModel，不直接访问 Repository。
+- 设置流由 ViewModel 暴露给 Activity（收口 UI 依赖）。
 
-## 7. 状态管理
-- 每个 feature 提供 `ViewModel` + `UiState(StateFlow)` + `UiEvent`
-- 标准状态：`Loading`、`Content`、`Empty`、`Error`
-- 单次事件：`SharedFlow`（Toast、导航、弹窗）
+## 7. 当前已知技术债
+1. 依赖注入仍是 `AppGraph`（Service Locator），未迁移到 Hilt/Koin。
+2. 下载能力已移出后续计划，但代码仍保留（仅历史兼容）。
+3. UI 层仍有少量业务逻辑可继续下沉（逐步治理）。
 
-## 8. 关键接口（示例）
-
-```kotlin
-interface GalleryRepository {
-    suspend fun getPopular(page: Int): Result<Page<Gallery>>
-    suspend fun search(query: String, page: Int, sort: Sort, tags: List<Tag>): Result<Page<Gallery>>
-    suspend fun getDetail(galleryId: String): Result<GalleryDetail>
-}
-
-interface ReaderRepository {
-    suspend fun getPageImages(galleryId: String): Result<List<PageImage>>
-    suspend fun saveProgress(galleryId: String, page: Int)
-    suspend fun getProgress(galleryId: String): Int?
-}
-```
-
-## 9. 渐进替换策略
-- 通过路由开关控制新旧页面切换。
-- 新模块接入后先灰度到内部渠道。
-- 每替换一页必须补充最小回归用例后才继续下一页。
-
-## 10. 最小测试矩阵
-- Data：API 解析、错误映射、Repository 合并策略。
-- Domain：UseCase 参数校验与组合逻辑。
-- UI：关键流程（搜索 -> 详情 -> 阅读 -> 续读）与空/错态展示。
+## 8. 下一步架构演进
+1. 引入 DI 容器，替换 `NhViewModelFactory + AppGraph` 组合。
+2. Repository 异常模型标准化（错误码 + 语义化提示）。
+3. 构建覆盖率门槛与 CI 质量闸门。
